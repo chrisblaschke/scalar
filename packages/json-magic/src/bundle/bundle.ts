@@ -13,6 +13,7 @@ import { toRelativePath } from '@/helpers/to-relative-path'
 import { getRaw } from '@/magic-proxy/proxy'
 import type { UnknownObject } from '@/types'
 
+import { getSchemaVocabulary, isReferenceContext, isSchemaContext } from '../document/reference-context'
 import { escapeJsonPointer } from '../helpers/escape-json-pointer'
 import { getSegmentsFromPath } from '../helpers/get-segments-from-path'
 import type { ReferenceDiagnostic } from './bundle-with-diagnostics'
@@ -23,7 +24,6 @@ import {
   documentReferences,
 } from './document-references'
 import { documentTraversal } from './document-traversal'
-import { getSchemaVocabulary, isReferenceContext, isSchemaContext } from './reference-context'
 import { getHash, uniqueValueGeneratorFactory } from './value-generator'
 
 /** Type guard to check if a value is an object with a $ref property */
@@ -729,26 +729,36 @@ export const bundleDocument = async (
         (node) => traversal.location(node)?.context !== 'data',
         (node, ref) => {
           const context = traversal.location(node)?.context
-          if (context && !isReferenceContext(context)) return undefined
+          if (context && !isReferenceContext(context)) {
+            return undefined
+          }
           const target = references.resolve(ref, references.origin(node) ?? defaultOrigin)
           return target?.value !== undefined ? `#/${target.path}` : ref
         },
         parsePath,
       )
-    if (diagnostics) deferredCopies.push(copy)
-    else copy()
+    if (diagnostics) {
+      deferredCopies.push(copy)
+    } else {
+      copy()
+    }
   }
   const identifySchema = (node: object): SchemaIdentity | undefined => {
-    if (!isObject(node)) return undefined
+    if (!isObject(node)) {
+      return undefined
+    }
     const location = traversal.location(node)
     const vocabulary = getSchemaVocabulary(config.traversal === 'document' ? location?.context : 'schema')
-    if (!vocabulary) return undefined
+    if (!vocabulary) {
+      return undefined
+    }
     if (
       config.traversal === 'document' &&
       ((hasRef(node) && location?.schemaSiblings !== true) ||
         (location?.context === 'asyncapi-schema' && typeof node.schemaFormat === 'string'))
-    )
+    ) {
       return undefined
+    }
     const id = vocabulary.idKeyword === undefined ? undefined : node[vocabulary.idKeyword]
     return {
       id: typeof id === 'string' && id !== '' ? id : undefined,
@@ -832,7 +842,9 @@ export const bundleDocument = async (
     if (result.ok) {
       const retrievalUri = resolveReferencePath(defaultOrigin, uri)
       const relativeUri = toRelativePath(retrievalUri, defaultOrigin)
-      if (diagnostics) cache.set(relativeUri, pending)
+      if (diagnostics) {
+        cache.set(relativeUri, pending)
+      }
       const key = await generate(relativeUri)
       traversal.register(result.data, retrievalUri)
       references.register(result.data, retrievalUri, [config.externalDocumentsKey, key])
@@ -877,9 +889,13 @@ export const bundleDocument = async (
     origin: string,
     key: string,
   ): ReturnType<typeof documentReferences> => {
-    if (!isChunk) return references
+    if (!isChunk) {
+      return references
+    }
     const existing = chunkReferences.get(origin)
-    if (existing) return existing
+    if (existing) {
+      return existing
+    }
     const targets = documentReferences(config.externalDocumentsKey)
     targets.register(document, origin, [config.externalDocumentsKey, key])
     chunkReferences.set(origin, targets)
@@ -889,15 +905,24 @@ export const bundleDocument = async (
   const pendingAnchors: (() => Promise<void>)[] = []
   /** Anchors can become visible when a later reference exposes a literal-data subtree. */
   const resolvePendingAnchors = async (): Promise<void> => {
-    for (const resolveAnchor of pendingAnchors) await resolveAnchor()
+    for (const resolveAnchor of pendingAnchors) {
+      await resolveAnchor()
+    }
   }
 
   /** Retain complete source documents until every reference has been checked. */
   const applyDeferredCopies = (): void => {
-    if (!diagnostics || !config.treeShake || diagnostics.length > 0) return
-    if (storedDocuments === undefined) delete documentRoot[config.externalDocumentsKey]
-    else documentRoot[config.externalDocumentsKey] = storedDocuments
-    for (const copy of deferredCopies) copy()
+    if (!diagnostics || !config.treeShake || diagnostics.length > 0) {
+      return
+    }
+    if (storedDocuments === undefined) {
+      delete documentRoot[config.externalDocumentsKey]
+    } else {
+      documentRoot[config.externalDocumentsKey] = storedDocuments
+    }
+    for (const copy of deferredCopies) {
+      copy()
+    }
   }
 
   const bundler = async (
@@ -919,7 +944,9 @@ export const bundleDocument = async (
     }
 
     const location = traversal.location(root)
-    if (location?.context === 'data') return
+    if (location?.context === 'data') {
+      return
+    }
 
     // Skip if this node has already been processed to prevent infinite recursion
     // and duplicate processing of the same node
@@ -958,8 +985,9 @@ export const bundleDocument = async (
 
     const visitChildren = async (): Promise<void> => {
       for (const key of Object.keys(config.traversal === 'document' ? getRaw(root) : root)) {
-        if (key === '$ref' || key === config.externalDocumentsKey || key === config.externalDocumentsMappingsKey)
+        if (key === '$ref' || key === config.externalDocumentsKey || key === config.externalDocumentsMappingsKey) {
           continue
+        }
         await bundler(
           root[key],
           nodeOrigin,
@@ -985,10 +1013,13 @@ export const bundleDocument = async (
       if (
         config.traversal === 'document' &&
         (location?.context === 'path-item' || (isSchemaContext(location?.context) && location?.schemaSiblings))
-      )
+      ) {
         await visitChildren()
+      }
       if (config.preserveReference?.(ref, { origin: nodeOrigin })) {
-        if (config.traversal !== 'document') await visitChildren()
+        if (config.traversal !== 'document') {
+          await visitChildren()
+        }
         await executeHooks('onAfterNodeProcess', root, context)
         return
       }
@@ -1098,7 +1129,9 @@ export const bundleDocument = async (
         pendingAnchors.push(async () => {
           const target = references.resolve(ref, nodeOrigin)
           if (target?.value !== undefined) {
-            if (!target.preserveReference) root.$ref = referenceToRoot(`#/${target.path}`, nodeOrigin)
+            if (!target.preserveReference) {
+              root.$ref = referenceToRoot(`#/${target.path}`, nodeOrigin)
+            }
           } else {
             report('missing-target')
             await executeHooks('onResolveError', root)
@@ -1235,7 +1268,9 @@ export const bundleDocument = async (
       await executeHooks('onResolveError', root)
 
       await executeHooks('onAfterNodeProcess', root, context)
-      if (diagnostics) return
+      if (diagnostics) {
+        return
+      }
       return console.warn(
         `Failed to resolve external reference "${resolvedPath}". The reference may be invalid, inaccessible, or missing a loader for this type of reference.`,
       )
@@ -1247,7 +1282,9 @@ export const bundleDocument = async (
     // Match the authored keys indexed by document traversal; virtual proxy links
     // can otherwise revisit the document through nodes that have no data context.
     for (const key in root) {
-      if (config.traversal === 'document' && !Object.hasOwn(getRaw(root), key)) continue
+      if (config.traversal === 'document' && !Object.hasOwn(getRaw(root), key)) {
+        continue
+      }
       if (key === config.externalDocumentsKey || key === config.externalDocumentsMappingsKey) {
         continue
       }
